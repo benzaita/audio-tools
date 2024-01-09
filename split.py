@@ -2,17 +2,29 @@
 
 import os
 import subprocess
-import sys
+import argparse
 
-input_file=sys.argv[1]
-output_dir=sys.argv[2]
-silence_duration=sys.argv[3] if len(sys.argv) > 3 else '2'
+parser = argparse.ArgumentParser()
+parser.add_argument("input_file", help="path to the input file")
+parser.add_argument("output_dir", help="path to the output directory")
+parser.add_argument("silence_duration", nargs="?", default="2", help="duration of silence in seconds (default: 2)")
+args = parser.parse_args()
+
+input_file = args.input_file
+output_dir = args.output_dir
+silence_duration = args.silence_duration
+
 output_basename, output_extension = os.path.splitext(os.path.basename(input_file))
 
 print('===> detecting silence in ' + input_file + ' with duration ' + silence_duration)
 
 # Run silencedetect and store the output in a variable
-silence_log = subprocess.run(['ffmpeg', '-i', input_file, '-af', f'silencedetect=d={silence_duration}', '-f', 'null', '-'], check=True, capture_output=True).stderr.decode('utf-8')
+try:
+    silence_log = subprocess.run(['ffmpeg', '-i', input_file, '-af', f'silencedetect=d={silence_duration}', '-f', 'null', '-'], 
+                                 text=True, check=True, capture_output=True).stderr
+except subprocess.CalledProcessError as exc:
+    print(exc.stderr)
+    raise
 
 # Extract lines containing silence_start or silence_end
 lines = [line for line in silence_log.split('\n') if 'silence_start' in line or 'silence_end' in line]
@@ -29,7 +41,7 @@ lines.append("silence_start: 999999")
 for i in range(0, len(lines), 2):
     end_time = lines[i].split(": ")[1].split(" |")[0].strip()
     start_time = lines[i + 1].split(": ")[1].strip()
-    output_file = f"{output_basename}-{output_idx:03}{output_extension}"
+    output_file = f"{output_dir}/{output_basename}-{output_idx:03}{output_extension}"
     
     if end_time == start_time:
         print(f"===> Skipping {end_time} .. {start_time}")
